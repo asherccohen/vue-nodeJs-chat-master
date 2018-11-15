@@ -1,0 +1,188 @@
+import Vue from 'vue'
+import Vuex from 'vuex'
+import User1 from '@/assets/user.png'
+import User2 from '@/assets/user2.png'
+import User3 from '@/assets/user3.png'
+import User4 from '@/assets/user4.png'
+import User5 from '@/assets/user5.png'
+import User6 from '@/assets/user6.png'
+import User7 from '@/assets/user7.png'
+import User8 from '@/assets/user8.png'
+
+Vue.use(Vuex)
+
+export default new Vuex.Store({
+    state: {
+        socket: {
+            isConnected: false,
+            message: '',
+            reconnectError: false,
+        },
+        current_user: {
+            avatar: User1,
+            author: ''
+        },
+        avatars: [{
+                type: 'round',
+                avatar: User2
+            },
+            {
+                type: 'round',
+                avatar: User3
+            },
+            {
+                type: 'round',
+                avatar: User4
+            },
+            {
+                type: 'round',
+                avatar: User5
+            },
+            {
+                type: 'round',
+                avatar: User6
+            },
+            {
+                type: 'round',
+                avatar: User7
+            },
+            {
+                type: 'round',
+                avatar: User8
+            },
+        ],
+        //Comments that are under the post
+        comments: [],
+        json: {},
+        reply: '',
+        myName: false,
+        msg: '',
+        randomAvatar: '',
+        likes: 0,
+        history: 0
+    },
+    mutations: {
+        SOCKET_ONOPEN(state, event) {
+            Vue.prototype.$socket = event.currentTarget
+            state.socket.isConnected = true
+                //console.log(event)
+        },
+        SOCKET_ONCLOSE(state) {
+            state.socket.isConnected = false
+                //console.log(event)
+        },
+        SOCKET_ONERROR(state, event) {
+            //console.error(state, event)
+            console.log('Sorry, but there\'s some problem with your ' +
+                'connection or the server is down.' + state, event)
+        },
+        // default handler called for all methods
+        SOCKET_ONMESSAGE(state, message) {
+            // try to parse JSON message. Because we know that the server
+            // always returns JSON this should work without any problem but
+            // we should make sure that the massage is not chunked or
+            // otherwise damaged.
+            //Each message is JSON.parsed if there is a data(content) response.
+            function parseMessage() {
+                try {
+                    state.json = JSON.parse(JSON.stringify(message.data));
+                } catch (e) {
+                    //console.log('Invalid JSON: ', message.data);
+                    return;
+                }
+            }
+
+            (function checkMessage() {
+                parseMessage();
+                if (Array.isArray(state.json)) {
+                    state.history = state.json.length - 1;
+                }
+                // first response from the server 
+                if (message.type === 'name') {
+                    //set name of the user
+                    // from now user can start sending messages
+                } else if (message.type === 'history') { // entire message history
+                    //state.history = state.json.length;
+                    (function messageTimer(i) {
+                        setTimeout(function() {
+                            // DO SOMETHING WITH data
+                            if (state.json[i].author != state.current_user.author) {
+                                //if it's not my message
+                                state.comments = state.json.push({
+                                    id: state.json[i].id,
+                                    author: state.json[i].author,
+                                    avatar: state.avatars[Math.floor((Math.random() * 4))].avatar,
+                                    text: state.json[i].text,
+                                    time: state.json[i].time
+                                });
+                            }
+                            //state.comments = state.json;
+                            if (--i) { // If i > 0, keep going
+                                messageTimer(i); // Call the loop again
+                            }
+                        }, Math.floor((Math.random() * 10) + 1) * 1000);
+                    })(state.history);
+                    // insert every single message to the chat window
+                } else {
+                    //console.log('Invalid message:', message);
+                }
+            }());
+        },
+        // mutations for reconnect methods
+        /*         SOCKET_RECONNECT(state, count) {
+                    //console.info(state, count)
+                }, */
+        SOCKET_RECONNECT_ERROR(state) {
+            state.socket.reconnectError = true;
+        },
+        sendMessage(state) {
+            if (state.reply != '') {
+                /*  if (state.myName != false) { */
+                Vue.prototype.$socket.send(state.reply)
+                state.comments.push({
+                    id: Vue.prototype.$uuid.v4(),
+                    author: state.current_user.author,
+                    avatar: state.current_user.avatar,
+                    text: state.reply,
+                    time: new Date()
+                });
+
+                /*                 } else {
+                                    Vue.prototype.$socket.send(state.reply)
+                                } */
+            }
+            state.reply = '';
+        },
+        updateMessage(state, message) {
+            state.reply = message
+        },
+        submittedName(state) {
+            if (state.myName === false) {
+                state.current_user.author = state.reply
+                state.randomAvatar = state.avatars[Math.floor(Math.random() * state.avatars.length)];
+                state.current_user.avatar = state.randomAvatar.avatar
+            }
+            state.myName = true
+        },
+        checkResponseTime() {
+            setInterval(function() {
+                if (Vue.prototype.$socket.readyState !== 1) {
+                    //console.log('Unable to communicate with the WebSocket server.');
+                }
+            }, 3000);
+        },
+        updateLikes(state, payload) {
+            state.likes = payload.likes
+        }
+    },
+    actions: {
+        sendMessage(context) {
+            context.commit('submittedName')
+            context.commit('sendMessage')
+            context.commit('checkResponseTime')
+        },
+        updateLikes(context, payload) {
+            context.commit('updateLikes', payload)
+        }
+    }
+})
